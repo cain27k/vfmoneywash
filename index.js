@@ -29,11 +29,22 @@ const commands = [
         .setName("rolls")
         .setDescription("How many rolls?")
         .setRequired(true)
+    )
+    .addStringOption(option =>
+      option
+        .setName("type")
+        .setDescription("Type of money wash")
+        .setRequired(true)
+        .addChoices(
+          { name: "Personal", value: "personal" },
+          { name: "Gang", value: "gang" }
+        )
     ),
 
   new SlashCommandBuilder()
     .setName("cancelwash")
     .setDescription("Cancel your active money wash")
+
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -53,7 +64,9 @@ client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "moneywash") {
+
     const rolls = interaction.options.getInteger("rolls");
+    const type = interaction.options.getString("type");
 
     if (rolls > MAX_ROLLS) {
       return interaction.reply({
@@ -71,12 +84,13 @@ client.on("interactionCreate", async interaction => {
 
     if (activeWashes.has(interaction.user.id)) {
       return interaction.reply({
-        content: `❌ You already have an active money wash. Use **/cancelwash** first if you want to cancel it.`,
+        content: `❌ You already have an active money wash. Use **/cancelwash** first.`,
         ephemeral: true
       });
     }
 
     const expected = rolls * ROLL_VALUE;
+
     const collectionDate = new Date(Date.now() + WASH_TIME);
 
     const formattedTime = collectionDate
@@ -93,7 +107,9 @@ client.on("interactionCreate", async interaction => {
 
     const message = await interaction.reply({
       content:
-        `💸 Money Wash Started\n` +
+        `${type === "gang"
+          ? "💸 Gang Money Wash Started"
+          : "💸 Personal Money Wash Started"}\n` +
         `User: ${interaction.user}\n` +
         `Rolls: ${rolls}\n` +
         `Expected: £${expected.toLocaleString()}\n` +
@@ -103,30 +119,34 @@ client.on("interactionCreate", async interaction => {
     });
 
     const timeout = setTimeout(async () => {
+
       if (!activeWashes.has(interaction.user.id)) return;
 
       await interaction.channel.send(
-        `${interaction.user} your money wash is ready for collection! 💸`
+        `${interaction.user} your ${type} money wash is ready for collection! 💸`
       );
 
       activeWashes.delete(interaction.user.id);
+
     }, WASH_TIME);
 
     activeWashes.set(interaction.user.id, {
       timeout,
       rolls,
       expected,
+      type,
       messageId: message.id,
       channelId: interaction.channel.id
     });
   }
 
   if (interaction.commandName === "cancelwash") {
+
     const wash = activeWashes.get(interaction.user.id);
 
     if (!wash) {
       return interaction.reply({
-        content: `❌ You do not have an active money wash to cancel.`,
+        content: `❌ You do not have an active money wash.`,
         ephemeral: true
       });
     }
@@ -134,10 +154,12 @@ client.on("interactionCreate", async interaction => {
     clearTimeout(wash.timeout);
 
     try {
+
       const channel = await client.channels.fetch(wash.channelId);
       const msg = await channel.messages.fetch(wash.messageId);
 
       await msg.delete();
+
     } catch (err) {
       console.log("Could not delete wash message.");
     }
