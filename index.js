@@ -91,14 +91,15 @@ client.on("interactionCreate", async interaction => {
       })
       .replace(",", "");
 
-    await interaction.reply({
+    const message = await interaction.reply({
       content:
         `💸 Money Wash Started\n` +
         `User: ${interaction.user}\n` +
         `Rolls: ${rolls}\n` +
         `Expected: £${expected.toLocaleString()}\n` +
         `Collection Time: ${formattedTime}\n` +
-        `Status: Washing...`
+        `Status: Washing...`,
+      fetchReply: true
     });
 
     const timeout = setTimeout(async () => {
@@ -114,7 +115,9 @@ client.on("interactionCreate", async interaction => {
     activeWashes.set(interaction.user.id, {
       timeout,
       rolls,
-      expected
+      expected,
+      messageId: message.id,
+      channelId: interaction.channel.id
     });
   }
 
@@ -129,10 +132,20 @@ client.on("interactionCreate", async interaction => {
     }
 
     clearTimeout(wash.timeout);
+
+    try {
+      const channel = await client.channels.fetch(wash.channelId);
+      const msg = await channel.messages.fetch(wash.messageId);
+
+      await msg.delete();
+    } catch (err) {
+      console.log("Could not delete wash message.");
+    }
+
     activeWashes.delete(interaction.user.id);
 
     return interaction.reply({
-      content: `✅ Your money wash has been cancelled. You will not be pinged.`,
+      content: `✅ Your money wash has been cancelled.`,
       ephemeral: true
     });
   }
